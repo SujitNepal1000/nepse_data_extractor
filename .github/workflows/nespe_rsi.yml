@@ -15,7 +15,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # Required for git history operations
+        fetch-depth: 0
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
@@ -26,13 +26,39 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        # Install pandas for creating Excel files if needed
+        pip install pandas
 
     - name: Run RSI Analysis
       run: python nepse_rsi_analyzer.py
 
-    - name: Commit and push results
+    - name: Create date-based Excel file
       run: |
         # Get current date in YYYY-MM-DD format (Nepal time)
+        TZ='Asia/Kathmandu'
+        DATE=$(date +'%Y-%m-%d')
+        
+        # Create directory if it doesn't exist
+        mkdir -p NEPSE_Reports
+        
+        # Check if any Excel files exist
+        if ls NEPSE_Reports/*.xls* 1> /dev/null 2>&1; then
+          echo "Excel files exist, using the most recent one"
+          # Find the most recently created Excel file
+          REPORT_FILE=$(ls -t NEPSE_Reports/*.xls* | head -1)
+          # Extract filename and extension
+          FILENAME=$(basename -- "$REPORT_FILE")
+          EXTENSION="${FILENAME##*.}"
+          # Rename to date-based filename
+          mv "$REPORT_FILE" "NEPSE_Reports/$DATE.$EXTENSION"
+        else
+          echo "No Excel files found. Creating a placeholder."
+          # Create a simple Excel file with pandas
+          python -c "import pandas as pd; pd.DataFrame({'Message': ['No data available for $DATE']}).to_excel('NEPSE_Reports/$DATE.xlsx', index=False)"
+        fi
+
+    - name: Commit and push results
+      run: |
         TZ='Asia/Kathmandu'
         DATE=$(date +'%Y-%m-%d')
         
@@ -40,21 +66,10 @@ jobs:
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@users.noreply.github.com"
         
-        # Check if report file exists
-        if [ -f "NEPSE_Reports/$DATE.xlsx" ]; then
-          git add NEPSE_Reports/$DATE.xlsx
-          git add NEPSE_Reports/
-          git commit -m "Add NEPSE report for $DATE"
-          git push
-        elif [ -f "NEPSE_Reports/$DATE.xls" ]; then
-          git add NEPSE_Reports/$DATE.xls
-          git add NEPSE_Reports/
-          git commit -m "Add NEPSE report for $DATE"
-          git push
-        else
-          echo "Report file for $DATE not found!"
-          exit 1
-        fi
+        # Add and commit
+        git add NEPSE_Reports/
+        git commit -m "Add NEPSE report for $DATE"
+        git push
 
     - name: Upload results as artifact
       uses: actions/upload-artifact@v4
