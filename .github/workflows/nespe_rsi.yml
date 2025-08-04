@@ -2,7 +2,7 @@ name: Daily NEPSE RSI Analysis
 
 on:
   schedule:
-    - cron: '15 18 * * *'
+    - cron: '15 08 * * *'
   push:
   workflow_dispatch:
 
