@@ -28,7 +28,7 @@ def get_api_data(endpoint, params=None, retries=MAX_RETRIES):
     url = f"{BASE_URL}{endpoint}"
     for attempt in range(1, retries + 1):
         try:
-            response = requests.get(url, params=params, timeout=30)
+            response = requests.get(url, params=params, timeout=300)
             logger.info(f"Request to {url} - Status: {response.status_code}")
             
             # Validate status code
