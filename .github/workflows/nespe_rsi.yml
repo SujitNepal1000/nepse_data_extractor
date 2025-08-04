@@ -52,12 +52,40 @@ jobs:
           # Rename to date-based filename
           mv "$REPORT_FILE" "NEPSE_Reports/$DATE.$EXTENSION"
         else
-          # Create error file if script failed
+          # Create error file with safe method
           if [ -f "nepse_analysis.log" ]; then
-            ERROR_MSG=$(tail -n 5 nepse_analysis.log)
-            python -c "import pandas as pd; pd.DataFrame({'Error': ['$ERROR_MSG']}).to_excel('NEPSE_Reports/$DATE.xlsx', index=False)"
+            # Create Python script to handle error safely
+            cat << 'EOF' > create_error_excel.py
+import pandas as pd
+import sys
+from pathlib import Path
+
+try:
+    date = sys.argv[1]
+    log_file = Path("nepse_analysis.log")
+    
+    if log_file.exists():
+        with open(log_file, 'r') as f:
+            error_msg = f.read()[-1000:]  # Get last 1000 characters
+    else:
+        error_msg = "No log file found"
+    
+    # Create error report
+    Path("NEPSE_Reports").mkdir(exist_ok=True)
+    df = pd.DataFrame({
+        'Error': [f"Analysis failed for {date}"],
+        'LogSnippet': [error_msg]
+    })
+    df.to_excel(f"NEPSE_Reports/{date}.xlsx", index=False)
+    print(f"Created error report for {date}")
+except Exception as e:
+    print(f"Failed to create error report: {str(e)}")
+    sys.exit(1)
+EOF
+            python create_error_excel.py "$DATE"
+            rm create_error_excel.py  # Clean up temporary script
           else
-            python -c "import pandas as pd; pd.DataFrame({'Error': ['Unknown error occurred during analysis']}).to_excel('NEPSE_Reports/$DATE.xlsx', index=False)"
+            python -c "import pandas as pd; pd.DataFrame({'Error': ['Unknown error occurred - no log available']}).to_excel('NEPSE_Reports/$DATE.xlsx', index=False)"
           fi
           echo "Created error report for $DATE"
         fi
@@ -69,7 +97,7 @@ jobs:
         git config --global user.email "actions@users.noreply.github.com"
         
         # Get current branch name
-        BRANCH=${GITHUB_REF##*/}
+        BRANCH=${GITHUB_REF#refs/heads/}
         
         # Get Nepal date for commit message
         TZ='Asia/Kathmandu'
