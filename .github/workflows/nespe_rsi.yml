@@ -2,19 +2,20 @@ name: Daily NEPSE RSI Analysis
 
 on:
   schedule:
-    # Run at 00:00 Nepal Time daily (18:15 UTC)
     - cron: '15 18 * * *'
-  push:  # Add push trigger
-  workflow_dispatch:  # Allows manual triggering
+  push:
+  workflow_dispatch:
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Increase timeout limit
+    timeout-minutes: 30
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Required for git history operations
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v5
@@ -29,7 +30,33 @@ jobs:
     - name: Run RSI Analysis
       run: python nepse_rsi_analyzer.py
 
-    - name: Upload results
+    - name: Commit and push results
+      run: |
+        # Get current date in YYYY-MM-DD format (Nepal time)
+        TZ='Asia/Kathmandu'
+        DATE=$(date +'%Y-%m-%d')
+        
+        # Configure git
+        git config --global user.name "GitHub Actions"
+        git config --global user.email "actions@users.noreply.github.com"
+        
+        # Check if report file exists
+        if [ -f "NEPSE_Reports/$DATE.xlsx" ]; then
+          git add NEPSE_Reports/$DATE.xlsx
+          git add NEPSE_Reports/
+          git commit -m "Add NEPSE report for $DATE"
+          git push
+        elif [ -f "NEPSE_Reports/$DATE.xls" ]; then
+          git add NEPSE_Reports/$DATE.xls
+          git add NEPSE_Reports/
+          git commit -m "Add NEPSE report for $DATE"
+          git push
+        else
+          echo "Report file for $DATE not found!"
+          exit 1
+        fi
+
+    - name: Upload results as artifact
       uses: actions/upload-artifact@v4
       with:
         name: nepse-reports
