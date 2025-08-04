@@ -4,6 +4,7 @@ on:
   schedule:
     # Run at 00:00 Nepal Time daily (18:15 UTC)
     - cron: '15 18 * * *'
+  push:  # Add push trigger
   workflow_dispatch:  # Allows manual triggering
 
 jobs:
@@ -13,12 +14,12 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v3
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
 
     - name: Install dependencies
       run: |
@@ -29,7 +30,7 @@ jobs:
       run: python nepse_rsi_analyzer.py
 
     - name: Upload results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nepse-reports
         path: |
