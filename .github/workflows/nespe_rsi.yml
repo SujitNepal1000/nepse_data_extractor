@@ -2,118 +2,71 @@ name: Daily NEPSE RSI Analysis
 
 on:
   schedule:
-    - cron: '15 08 * * *'
+    - cron: '30 2 * * *'  # 02:30 UTC = 08:15 Nepal Time
   push:
   workflow_dispatch:
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pandas openpyxl
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Run RSI Analysis
-      run: python nepse_rsi_analyzer.py || true  # Continue even if script fails
+      - name: Create reports directory
+        run: mkdir -p NEPSE_Reports
 
-    - name: Create or rename Excel file
-      run: |
-        # Get current date in YYYY-MM-DD format (Nepal time)
-        TZ='Asia/Kathmandu'
-        DATE=$(date +'%Y-%m-%d')
-        
-        # Create directory if it doesn't exist
-        mkdir -p NEPSE_Reports
-        
-        # Check if any Excel files exist
-        if compgen -G "NEPSE_Reports/*.xls*" > /dev/null; then
-          echo "Excel files exist, using the most recent one"
-          # Find the most recently created Excel file
+      - name: Run RSI Analysis
+        run: python nepse_rsi_analyzer.py || true
+
+      - name: Rename report with date
+        run: |
+          # Set Nepal timezone
+          TZ='Asia/Kathmandu'
+          DATE=$(date +'%Y-%m-%d')
+          
+          # Find the most recent Excel file
           REPORT_FILE=$(ls -t NEPSE_Reports/*.xls* | head -1)
-          # Extract filename and extension
-          FILENAME=$(basename -- "$REPORT_FILE")
-          EXTENSION="${FILENAME##*.}"
-          # Rename to date-based filename
-          mv "$REPORT_FILE" "NEPSE_Reports/$DATE.$EXTENSION"
-        else
-          # Create error file with safe method
-          if [ -f "nepse_analysis.log" ]; then
-            # Create Python script to handle error safely
-            cat << 'EOF' > create_error_excel.py
-import pandas as pd
-import sys
-from pathlib import Path
-
-try:
-    date = sys.argv[1]
-    log_file = Path("nepse_analysis.log")
-    
-    if log_file.exists():
-        with open(log_file, 'r') as f:
-            error_msg = f.read()[-1000:]  # Get last 1000 characters
-    else:
-        error_msg = "No log file found"
-    
-    # Create error report
-    Path("NEPSE_Reports").mkdir(exist_ok=True)
-    df = pd.DataFrame({
-        'Error': [f"Analysis failed for {date}"],
-        'LogSnippet': [error_msg]
-    })
-    df.to_excel(f"NEPSE_Reports/{date}.xlsx", index=False)
-    print(f"Created error report for {date}")
-except Exception as e:
-    print(f"Failed to create error report: {str(e)}")
-    sys.exit(1)
-EOF
-            python create_error_excel.py "$DATE"
-            rm create_error_excel.py  # Clean up temporary script
+          
+          if [ -n "$REPORT_FILE" ]; then
+            # Rename with date
+            FILENAME=$(basename -- "$REPORT_FILE")
+            EXTENSION="${FILENAME##*.}"
+            mv "$REPORT_FILE" "NEPSE_Reports/$DATE.$EXTENSION"
           else
-            python -c "import pandas as pd; pd.DataFrame({'Error': ['Unknown error occurred - no log available']}).to_excel('NEPSE_Reports/$DATE.xlsx', index=False)"
+            echo "No report file found"
           fi
-          echo "Created error report for $DATE"
-        fi
 
-    - name: Commit and push results
-      run: |
-        # Configure git
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@users.noreply.github.com"
-        
-        # Get current branch name
-        BRANCH=${GITHUB_REF#refs/heads/}
-        
-        # Get Nepal date for commit message
-        TZ='Asia/Kathmandu'
-        COMMIT_DATE=$(date +'%Y-%m-%d')
-        
-        # Add and commit changes
-        git add NEPSE_Reports/
-        git commit -m "Add NEPSE report for $COMMIT_DATE"
-        
-        # Push changes using token authentication
-        git push origin HEAD:$BRANCH
+      - name: Commit and Push Daily Report
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@users.noreply.github.com"
+          
+          BRANCH=${GITHUB_REF#refs/heads/}
+          TZ='Asia/Kathmandu'
+          DATE=$(date +'%Y-%m-%d')
+          
+          git add NEPSE_Reports/
+          git commit -m "Add NEPSE report for $DATE"
+          git push origin HEAD:$BRANCH
 
-    - name: Upload results as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: nepse-reports
-        path: |
-          NEPSE_Reports/
-          nepse_analysis.log
+      - name: Upload Daily Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nepse-daily-report
+          path: NEPSE_Reports/

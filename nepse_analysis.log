@@ -27,3 +27,19 @@
 2025-08-04 17:37:53,869 - WARNING - Timeout error (524) on attempt 3
 2025-08-04 17:37:53,870 - ERROR - All attempts failed for endpoint: /PriceVolume
 2025-08-04 17:37:53,872 - ERROR - Failed to get today's market data. Exiting.
+2025-08-04 19:42:16,146 - INFO - Starting NEPSE RSI Analysis
+2025-08-04 19:42:16,148 - INFO - Step 1/6: Fetching all stock symbols
+2025-08-04 19:42:16,148 - INFO - Fetching all symbols from SectorScrips API
+2025-08-04 19:42:17,161 - INFO - Request to https://nepseapi.surajrimal.dev/SectorScrips - Status: 200
+2025-08-04 19:42:17,166 - INFO - Found 524 symbols across 14 sectors
+2025-08-04 19:42:17,167 - INFO - Step 2/6: Fetching today's market data
+2025-08-04 19:43:58,417 - INFO - Request to https://nepseapi.surajrimal.dev/PriceVolume - Status: 524
+2025-08-04 19:43:58,419 - WARNING - Timeout error (524) on attempt 1
+2025-08-04 19:43:58,420 - INFO - Retrying in 2 seconds...
+2025-08-04 19:45:42,640 - INFO - Request to https://nepseapi.surajrimal.dev/PriceVolume - Status: 524
+2025-08-04 19:45:42,643 - WARNING - Timeout error (524) on attempt 2
+2025-08-04 19:45:42,650 - INFO - Retrying in 2 seconds...
+2025-08-04 19:47:25,831 - INFO - Request to https://nepseapi.surajrimal.dev/PriceVolume - Status: 524
+2025-08-04 19:47:25,832 - WARNING - Timeout error (524) on attempt 3
+2025-08-04 19:47:25,832 - ERROR - All attempts failed for endpoint: /PriceVolume
+2025-08-04 19:47:25,836 - ERROR - Failed to get today's market data. Exiting.
