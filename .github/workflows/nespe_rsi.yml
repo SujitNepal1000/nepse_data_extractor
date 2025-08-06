@@ -2,7 +2,7 @@ name: Daily NEPSE RSI Analysis
 
 on:
   schedule:
-    - cron: '30 2 * * *'  # 02:30 UTC = 08:15 Nepal Time
+    - cron: '15 6 * * *'  # 06:15 UTC = 12:00 PM Nepal Time
   push:
   workflow_dispatch:
 
