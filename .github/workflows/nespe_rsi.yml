@@ -54,16 +54,27 @@ jobs:
 
       - name: Commit and Push Daily Report
         run: |
+          # Configure git with proper credentials
           git config --global user.name "GitHub Actions"
           git config --global user.email "actions@users.noreply.github.com"
           
+          # Get current branch name
           BRANCH=${GITHUB_REF#refs/heads/}
+          
+          # Set Nepal timezone for date
           TZ='Asia/Kathmandu'
           DATE=$(date +'%Y-%m-%d')
           
+          # Add and commit changes
           git add NEPSE_Reports/
-          git commit -m "Add NEPSE report for $DATE"
-          git push origin HEAD:$BRANCH
+          
+          # Check if there are changes to commit
+          if ! git diff-index --quiet HEAD --; then
+            git commit -m "Add NEPSE report for $DATE"
+            git push origin HEAD:$BRANCH
+          else
+            echo "No changes to commit"
+          fi
 
       - name: Upload Daily Report
         uses: actions/upload-artifact@v4
