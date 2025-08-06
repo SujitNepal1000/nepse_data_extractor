@@ -41,7 +41,7 @@ jobs:
           DATE=$(date +'%Y-%m-%d')
           
           # Find the most recent Excel file
-          REPORT_FILE=$(ls -t NEPSE_Reports/*.xls* | head -1)
+          REPORT_FILE=$(ls -t NEPSE_Reports/*.xls* 2>/dev/null | head -1)
           
           if [ -n "$REPORT_FILE" ]; then
             # Rename with date
@@ -65,12 +65,12 @@ jobs:
           TZ='Asia/Kathmandu'
           DATE=$(date +'%Y-%m-%d')
           
-          # Add and commit changes
-          git add NEPSE_Reports/
+          # Add both reports and log file
+          git add NEPSE_Reports/ nepse_analysis.log
           
           # Check if there are changes to commit
           if ! git diff-index --quiet HEAD --; then
-            git commit -m "Add NEPSE report for $DATE"
+            git commit -m "Add NEPSE report and log for $DATE"
             git push origin HEAD:$BRANCH
           else
             echo "No changes to commit"
