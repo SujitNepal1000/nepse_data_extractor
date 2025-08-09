@@ -1,4 +1,11 @@
-requests
-pandas
-numpy
-openpyxl
+requests>=2.31.0
+pandas>=2.2.4
+numpy>=1.26.0
+beautifulsoup4>=4.12.2
+openpyxl>=3.1.2
+selenium>=4.14.0
+webdriver-manager>=4.0.0
+gspread>=5.8.0
+google-auth>=2.20.0
+gspread-dataframe>=3.3.0
+urllib3>=2.0.0

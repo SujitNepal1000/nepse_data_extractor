@@ -1,0 +1,49 @@
+name: Run NEPSE extractor and update Google Sheet
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    - cron: '15 10 * * 0-4'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install system deps (Chrome)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libxi6 libgconf-2-4 libnss3 libxss1 libasound2 wget unzip
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install chromedriver
+        run: |
+          CHROMEDRIVER_VERSION=$(curl -sS chromedriver.storage.googleapis.com/LATEST_RELEASE)
+          wget -N https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip -P /tmp
+          unzip -o /tmp/chromedriver_linux64.zip -d /tmp
+          sudo mv /tmp/chromedriver /usr/local/bin/
+          sudo chmod +x /usr/local/bin/chromedriver
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas numpy beautifulsoup4 openpyxl selenium webdriver-manager gspread google-auth gspread-dataframe
+
+      - name: Run extractor
+        env:
+          GSP_SA_KEY: ${{ secrets.GSP_SA_KEY }}
+          GSHEET_ID: ${{ secrets.GSHEET_ID }}
+          GSHEET_PREFIX: NEPSE
+        run: |
+          python nepse_analysis.py

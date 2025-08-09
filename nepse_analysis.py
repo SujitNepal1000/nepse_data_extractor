@@ -1,3 +1,4 @@
+import os
 import time
 import requests
 import pandas as pd
@@ -11,6 +12,9 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from google.oauth2.service_account import Credentials
+import gspread
+from gspread_dataframe import set_with_dataframe
 
 SHARESANSAR_AJAX = 'https://www.sharesansar.com/ajaxtodayshareprice'
 SHARESANSAR_URL = 'https://www.sharesansar.com/today-share-price'
@@ -80,9 +84,15 @@ def post_with_csrf(session, ajax_url, page_url, date_str, max_retries=3, base_de
                     soup = BeautifulSoup(text, 'html.parser')
                     table = soup.find('table')
                     if table:
-                        headers = [th.get_text(strip=True) for th in table.find_all('th')]
+                        thead = table.find('thead')
+                        if thead:
+                            headers = [th.get_text(strip=True) for th in thead.find_all('th')]
+                            tbody = table.find('tbody')
+                        else:
+                            headers = [th.get_text(strip=True) for th in table.find_all('th')]
+                            tbody = table
                         rows = []
-                        for tr in table.find_all('tr'):
+                        for tr in tbody.find_all('tr'):
                             cols = [td.get_text(strip=True) for td in tr.find_all('td')]
                             if cols and len(cols) == len(headers):
                                 rows.append(dict(zip(headers, cols)))
@@ -140,9 +150,6 @@ def fetch_with_selenium(date_str, timeout=30):
     finally:
         driver.quit()
 
-def _normalize_headers(headers):
-    return [h.strip() for h in headers]
-
 def _rows_from_table_html(html_text):
     try:
         soup = BeautifulSoup(html_text, 'html.parser')
@@ -150,11 +157,12 @@ def _rows_from_table_html(html_text):
         if not table:
             return []
         thead = table.find('thead')
-        if not thead:
-            headers = [th.get_text(strip=True) for th in table.find_all('th')]
-        else:
+        if thead:
             headers = [th.get_text(strip=True) for th in thead.find_all('th')]
-        tbody = table.find('tbody') or table
+            tbody = table.find('tbody') or table
+        else:
+            headers = [th.get_text(strip=True) for th in table.find_all('th')]
+            tbody = table
         rows = []
         for tr in tbody.find_all('tr'):
             cols = [td.get_text(strip=True) for td in tr.find_all('td')]
@@ -231,7 +239,7 @@ def fetch_historical_data(start_date, end_date):
                     if latest_snapshot_signature and signature == latest_snapshot_signature and date_str != END_DATE.strftime('%Y-%m-%d'):
                         try:
                             selenium_data = fetch_with_selenium(date_str)
-                        except Exception as e:
+                        except Exception:
                             selenium_data = None
                         if selenium_data:
                             data_s = selenium_data.get('data') if isinstance(selenium_data, dict) and 'data' in selenium_data else selenium_data
@@ -397,6 +405,36 @@ def process_data(df):
             df_work[c] = np.nan
     return df_work
 
+def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix='NEPSE'):
+    creds_dict = json.loads(service_account_json_str)
+    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+    sh = client.open_by_key(spreadsheet_id)
+    try:
+        try:
+            ws = sh.worksheet('Master')
+            sh.del_worksheet(ws)
+        except Exception:
+            pass
+        ws = sh.add_worksheet(title='Master', rows=str(len(df) + 10), cols='50')
+        set_with_dataframe(ws, df)
+        for date, group in sorted(df.groupby('date')):
+            title = f"{sheet_prefix}-{date}"
+            if len(title) > 100:
+                title = title[:100]
+            try:
+                ws = sh.worksheet(title)
+                sh.del_worksheet(ws)
+            except Exception:
+                pass
+            ws = sh.add_worksheet(title=title, rows=str(len(group) + 5), cols='50')
+            set_with_dataframe(ws, group.reset_index(drop=True))
+        return True
+    except Exception as e:
+        print(f'upload failed: {e}')
+        return False
+
 def save_to_excel(df, filename=OUTPUT_FILE):
     if df.empty:
         print('empty dataframe, nothing to save')
@@ -406,31 +444,7 @@ def save_to_excel(df, filename=OUTPUT_FILE):
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     display_map = [
-        ('S.No', None),
-        ('Symbol', 'symbol'),
-        ('Conf.', 'conf'),
-        ('Open', 'open'),
-        ('High', 'high'),
-        ('Low', 'low'),
-        ('Close', 'close'),
-        ('LTP', 'ltp'),
-        ('Close - LTP', 'close_minus_ltp'),
-        ('Close - LTP %', 'close_minus_ltp_pct'),
-        ('VWAP', 'vwap'),
-        ('Vol', 'vol'),
-        ('Prev. Close', 'prev_close'),
-        ('Turnover', 'turnover'),
-        ('Trans.', 'trans'),
-        ('Diff', 'diff'),
-        ('Range', 'range'),
-        ('Diff %', 'diff_pct'),
-        ('Range %', 'range_pct'),
-        ('VWAP %', 'vwap_pct'),
-        ('52 Weeks High', '52_high'),
-        ('52 Weeks Low', '52_low'),
-        ('RSI', 'rsi'),
-        ('MACD', 'macd'),
-        ('Signal', 'signal')
+        ('S.No', None), ('Symbol', 'symbol'), ('Conf.', 'conf'), ('Open', 'open'), ('High', 'high'), ('Low', 'low'), ('Close', 'close'), ('LTP', 'ltp'), ('Close - LTP', 'close_minus_ltp'), ('Close - LTP %', 'close_minus_ltp_pct'), ('VWAP', 'vwap'), ('Vol', 'vol'), ('Prev. Close', 'prev_close'), ('Turnover', 'turnover'), ('Trans.', 'trans'), ('Diff', 'diff'), ('Range', 'range'), ('Diff %', 'diff_pct'), ('Range %', 'range_pct'), ('VWAP %', 'vwap_pct'), ('52 Weeks High', '52_high'), ('52 Weeks Low', '52_low'), ('RSI', 'rsi'), ('MACD', 'macd'), ('Signal', 'signal')
     ]
     with pd.ExcelWriter(filename, engine='openpyxl') as writer:
         for date, group in sorted(df.groupby('date')):
@@ -460,9 +474,30 @@ def main():
     setup_logging()
     print('starting historical job')
     logging.info('starting historical job')
-    df_raw = fetch_historical_data(START_DATE, END_DATE)
+    start = os.environ.get('START_DATE')
+    end = os.environ.get('END_DATE')
+    if start:
+        try:
+            s = datetime.fromisoformat(start)
+        except Exception:
+            s = START_DATE
+    else:
+        s = START_DATE
+    if end:
+        try:
+            e = datetime.fromisoformat(end)
+        except Exception:
+            e = END_DATE
+    else:
+        e = END_DATE
+    df_raw = fetch_historical_data(s, e)
     df = process_data(df_raw)
     save_to_excel(df)
+    sa_json = os.environ.get('GSP_SA_KEY')
+    sheet_id = os.environ.get('GSHEET_ID')
+    if sa_json and sheet_id:
+        ok = upload_to_gsheet(df, sheet_id, sa_json, sheet_prefix=os.environ.get('GSHEET_PREFIX', 'NEPSE'))
+        print('upload to gsheet:', ok)
     print('job complete')
     logging.info('job complete')
 
