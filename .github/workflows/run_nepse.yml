@@ -43,3 +43,9 @@ jobs:
         GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
       run: python nepse_analysis.py
+
+    - name: Test GSheet auth
+      env:
+        GSP_SA_KEY: ${{ secrets.GSP_SA_KEY }}
+        GSHEET_ID: ${{ secrets.GSHEET_ID }}
+      run: python tests/test_gsheet_auth.py
