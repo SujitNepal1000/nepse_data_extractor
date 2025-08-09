@@ -42,4 +42,4 @@ jobs:
       env:
         GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
         GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
-      run: python script.py
+      run: python nepse_analysis.py
