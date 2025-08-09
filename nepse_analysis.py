@@ -16,12 +16,16 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread_dataframe import set_with_dataframe
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "nepse_analysis.log")
+
 SHARESANSAR_AJAX = 'https://www.sharesansar.com/ajaxtodayshareprice'
 SHARESANSAR_URL = 'https://www.sharesansar.com/today-share-price'
 START_DATE = datetime(2025, 7, 1)
 END_DATE = datetime.now()
-OUTPUT_FILE = 'output/nepse_analysis.xlsx'
-LOG_FILE = 'logs/nepse_analysis.log'
+OUTPUT_FILE = os.path.join(BASE_DIR, 'output', 'nepse_analysis.xlsx')
 RSI_PERIOD = 14
 MACD_FAST = 12
 MACD_SLOW = 26
@@ -229,7 +233,6 @@ def fetch_historical_data(start_date, end_date):
                 else:
                     df_day.columns = [str(c).strip() for c in df_day.columns]
                     df_day['date'] = pd.to_datetime(date_str).date()
-                    symbols = set(df_day['symbol'].astype(str)) if 'symbol' in df_day.columns else set()
                     sig_parts = []
                     for c in ['close', 'prev_close', 'volume']:
                         if c in df_day.columns:
@@ -440,9 +443,7 @@ def save_to_excel(df, filename=OUTPUT_FILE):
         print('empty dataframe, nothing to save')
         logging.error('empty dataframe, nothing to save')
         return
-    import os
     os.makedirs(os.path.dirname(filename), exist_ok=True)
-    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
     display_map = [
         ('S.No', None), ('Symbol', 'symbol'), ('Conf.', 'conf'), ('Open', 'open'), ('High', 'high'), ('Low', 'low'), ('Close', 'close'), ('LTP', 'ltp'), ('Close - LTP', 'close_minus_ltp'), ('Close - LTP %', 'close_minus_ltp_pct'), ('VWAP', 'vwap'), ('Vol', 'vol'), ('Prev. Close', 'prev_close'), ('Turnover', 'turnover'), ('Trans.', 'trans'), ('Diff', 'diff'), ('Range', 'range'), ('Diff %', 'diff_pct'), ('Range %', 'range_pct'), ('VWAP %', 'vwap_pct'), ('52 Weeks High', '52_high'), ('52 Weeks Low', '52_low'), ('RSI', 'rsi'), ('MACD', 'macd'), ('Signal', 'signal')
     ]
@@ -472,7 +473,6 @@ def save_to_excel(df, filename=OUTPUT_FILE):
 
 def main():
     setup_logging()
-    print('starting historical job')
     logging.info('starting historical job')
     start = os.environ.get('START_DATE')
     end = os.environ.get('END_DATE')
