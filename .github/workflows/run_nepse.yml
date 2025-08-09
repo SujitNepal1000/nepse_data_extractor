@@ -49,3 +49,12 @@ jobs:
         GSP_SA_KEY: ${{ secrets.GSP_SA_KEY }}
         GSHEET_ID: ${{ secrets.GSHEET_ID }}
       run: python tests/test_gsheet_auth.py
+
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nepse-artifacts
+        path: |
+          logs/
+          output/*.xlsx

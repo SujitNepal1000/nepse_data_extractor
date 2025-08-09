@@ -408,35 +408,59 @@ def process_data(df):
             df_work[c] = np.nan
     return df_work
 
-def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix='NEPSE'):
-    creds_dict = json.loads(service_account_json_str)
-    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    client = gspread.authorize(creds)
-    sh = client.open_by_key(spreadsheet_id)
+def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix='NEPSE', max_retries=3):
+    if df is None:
+        logging.error("upload_to_gsheet: df is None")
+        return False
+    if not spreadsheet_id:
+        logging.error("upload_to_gsheet: spreadsheet_id is empty")
+        return False
     try:
+        creds_dict = json.loads(service_account_json_str)
+    except Exception as e:
+        logging.exception("Failed to parse service-account JSON")
+        print("Failed to parse service-account JSON:", e)
+        return False
+
+    scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    for attempt in range(1, max_retries+1):
         try:
-            ws = sh.worksheet('Master')
-            sh.del_worksheet(ws)
-        except Exception:
-            pass
-        ws = sh.add_worksheet(title='Master', rows=str(len(df) + 10), cols='50')
-        set_with_dataframe(ws, df)
-        for date, group in sorted(df.groupby('date')):
-            title = f"{sheet_prefix}-{date}"
-            if len(title) > 100:
-                title = title[:100]
+            creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+            client = gspread.authorize(creds)
+            sh = client.open_by_key(spreadsheet_id)
+            # write master sheet (overwrite for idempotence)
             try:
-                ws = sh.worksheet(title)
+                ws = sh.worksheet('Master')
                 sh.del_worksheet(ws)
             except Exception:
                 pass
-            ws = sh.add_worksheet(title=title, rows=str(len(group) + 5), cols='50')
-            set_with_dataframe(ws, group.reset_index(drop=True))
-        return True
-    except Exception as e:
-        print(f'upload failed: {e}')
-        return False
+            ws = sh.add_worksheet(title='Master', rows=str(len(df) + 10), cols='50')
+            set_with_dataframe(ws, df)
+            # per-date sheets
+            for date, group in sorted(df.groupby('date')):
+                title = f"{sheet_prefix}-{date}"
+                if len(title) > 100:
+                    title = title[:100]
+                try:
+                    ws = sh.worksheet(title)
+                    sh.del_worksheet(ws)
+                except Exception:
+                    pass
+                ws = sh.add_worksheet(title=title, rows=str(len(group) + 5), cols='50')
+                set_with_dataframe(ws, group.reset_index(drop=True))
+            logging.info("upload_to_gsheet: upload successful")
+            print("upload_to_gsheet: upload successful")
+            return True
+        except Exception as e:
+            logging.error("upload_to_gsheet: attempt %d failed: %s", attempt, str(e))
+            logging.error(traceback.format_exc())
+            print(f"upload_to_gsheet: attempt {attempt} failed: {e}")
+            print(traceback.format_exc())
+            # if it's the last attempt re-raise or return False
+            if attempt == max_retries:
+                return False
+            time.sleep(2 ** attempt)
+    return False
 
 def save_to_excel(df, filename=OUTPUT_FILE):
     if df.empty:
