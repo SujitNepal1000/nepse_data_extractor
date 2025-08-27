@@ -16,6 +16,7 @@ from google.oauth2.service_account import Credentials
 import gspread
 from gspread_dataframe import set_with_dataframe
 
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
