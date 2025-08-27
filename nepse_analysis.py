@@ -416,6 +416,8 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
         logging.error("upload_to_gsheet: spreadsheet_id is empty")
         return False
     try:
+        # 🔽 Fix: replace escaped "\n" with real newlines from GitHub Secrets
+        service_account_json_str = service_account_json_str.replace('\\n', '\n')
         creds_dict = json.loads(service_account_json_str)
     except Exception as e:
         logging.exception("Failed to parse service-account JSON")
@@ -428,6 +430,7 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
             creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
             client = gspread.authorize(creds)
             sh = client.open_by_key(spreadsheet_id)
+
             # write master sheet (overwrite for idempotence)
             try:
                 ws = sh.worksheet('Master')
@@ -436,6 +439,7 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
                 pass
             ws = sh.add_worksheet(title='Master', rows=str(len(df) + 10), cols='50')
             set_with_dataframe(ws, df)
+
             # per-date sheets
             for date, group in sorted(df.groupby('date')):
                 title = f"{sheet_prefix}-{date}"
@@ -448,6 +452,7 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
                     pass
                 ws = sh.add_worksheet(title=title, rows=str(len(group) + 5), cols='50')
                 set_with_dataframe(ws, group.reset_index(drop=True))
+
             logging.info("upload_to_gsheet: upload successful")
             print("upload_to_gsheet: upload successful")
             return True
@@ -456,11 +461,11 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
             logging.error(traceback.format_exc())
             print(f"upload_to_gsheet: attempt {attempt} failed: {e}")
             print(traceback.format_exc())
-            # if it's the last attempt re-raise or return False
             if attempt == max_retries:
                 return False
             time.sleep(2 ** attempt)
     return False
+
 
 def save_to_excel(df, filename=OUTPUT_FILE):
     if df.empty:
@@ -469,7 +474,15 @@ def save_to_excel(df, filename=OUTPUT_FILE):
         return
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     display_map = [
-        ('S.No', None), ('Symbol', 'symbol'), ('Conf.', 'conf'), ('Open', 'open'), ('High', 'high'), ('Low', 'low'), ('Close', 'close'), ('LTP', 'ltp'), ('Close - LTP', 'close_minus_ltp'), ('Close - LTP %', 'close_minus_ltp_pct'), ('VWAP', 'vwap'), ('Vol', 'vol'), ('Prev. Close', 'prev_close'), ('Turnover', 'turnover'), ('Trans.', 'trans'), ('Diff', 'diff'), ('Range', 'range'), ('Diff %', 'diff_pct'), ('Range %', 'range_pct'), ('VWAP %', 'vwap_pct'), ('52 Weeks High', '52_high'), ('52 Weeks Low', '52_low'), ('RSI', 'rsi'), ('MACD', 'macd'), ('Signal', 'signal')
+        ('S.No', None), ('Symbol', 'symbol'), ('Conf.', 'conf'),
+        ('Open', 'open'), ('High', 'high'), ('Low', 'low'),
+        ('Close', 'close'), ('LTP', 'ltp'), ('Close - LTP', 'close_minus_ltp'),
+        ('Close - LTP %', 'close_minus_ltp_pct'), ('VWAP', 'vwap'),
+        ('Vol', 'vol'), ('Prev. Close', 'prev_close'), ('Turnover', 'turnover'),
+        ('Trans.', 'trans'), ('Diff', 'diff'), ('Range', 'range'),
+        ('Diff %', 'diff_pct'), ('Range %', 'range_pct'), ('VWAP %', 'vwap_pct'),
+        ('52 Weeks High', '52_high'), ('52 Weeks Low', '52_low'),
+        ('RSI', 'rsi'), ('MACD', 'macd'), ('Signal', 'signal')
     ]
     with pd.ExcelWriter(filename, engine='openpyxl') as writer:
         for date, group in sorted(df.groupby('date')):
@@ -495,6 +508,7 @@ def save_to_excel(df, filename=OUTPUT_FILE):
         print(f'saved excel with {len(df.date.unique())} sheets to {filename}')
         logging.info(f'saved excel with {len(df.date.unique())} sheets to {filename}')
 
+
 def main():
     setup_logging()
     logging.info('starting historical job')
@@ -514,16 +528,20 @@ def main():
             e = END_DATE
     else:
         e = END_DATE
+
     df_raw = fetch_historical_data(s, e)
     df = process_data(df_raw)
     save_to_excel(df)
+
     sa_json = os.environ.get('GSP_SA_KEY')
     sheet_id = os.environ.get('GSHEET_ID')
     if sa_json and sheet_id:
         ok = upload_to_gsheet(df, sheet_id, sa_json, sheet_prefix=os.environ.get('GSHEET_PREFIX', 'NEPSE'))
         print('upload to gsheet:', ok)
+
     print('job complete')
     logging.info('job complete')
+
 
 if __name__ == '__main__':
     main()

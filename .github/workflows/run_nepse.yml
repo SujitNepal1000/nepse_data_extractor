@@ -2,6 +2,8 @@ name: Nepse Data Updater
 
 on:
   push:
+    branches:
+        - main
   schedule:
     # 4 PM Nepal Time = 10:15 UTC
     - cron: '15 10 * * 0-4'
