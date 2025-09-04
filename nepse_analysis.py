@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import logging
 import json
+import traceback
 from urllib.parse import unquote
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -15,7 +16,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from google.oauth2.service_account import Credentials
 import gspread
 from gspread_dataframe import set_with_dataframe
-
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -280,18 +280,35 @@ def fetch_historical_data(start_date, end_date):
     return df_all
 
 def compute_rsi(series, period=RSI_PERIOD):
+    """
+    Classic RSI using SMA smoothing.
+    period: length for RSI (default 14)
+    smoothing uses simple moving average with the same length (14).
+    """
     if series is None or len(series) == 0:
-        return pd.Series(np.nan, index=series.index if hasattr(series, 'index') else [])
+        # return an empty series with same index if possible
+        idx = series.index if hasattr(series, 'index') else []
+        return pd.Series(np.nan, index=idx)
+
     s = series.astype(float)
     delta = s.diff()
+
+    # Gains and losses
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
+
+    # SMA smoothing (simple moving average) with window = period
+    avg_gain = gain.rolling(window=period, min_periods=period).mean()
+    avg_loss = loss.rolling(window=period, min_periods=period).mean()
+
+    # RS and RSI
     rs = avg_gain / avg_loss
-    rs = rs.replace([np.inf, -np.inf], np.nan)
     rsi = 100 - (100 / (1 + rs))
+
+    # If avg_loss == 0 => RSI = 100 (no losses in window)
     rsi.loc[avg_loss == 0] = 100
+
+    # keep NaN for periods before enough data
     return rsi
 
 def compute_macd(series):
@@ -387,22 +404,34 @@ def process_data(df):
     else:
         df_work['date'] = pd.NaT
     df_work = df_work.sort_values(['symbol', 'date']).reset_index(drop=True)
+
+    # RSI (SMA smoothing, length = RSI_PERIOD)
     df_work['rsi'] = df_work.groupby('symbol')['close'].transform(lambda x: compute_rsi(x, period=RSI_PERIOD))
+
+    # MACD
     df_work['macd'] = np.nan
     df_work['signal'] = np.nan
     for name, grp in df_work.groupby('symbol'):
         macd_series, signal_series = compute_macd(grp['close'])
         df_work.loc[grp.index, 'macd'] = macd_series.values
         df_work.loc[grp.index, 'signal'] = signal_series.values
+
+    # 52-week calcs (using rolling window ~252 trading days)
     window = 252
     df_work['52_high_calc'] = df_work.groupby('symbol')['high'].transform(lambda x: x.rolling(window=window, min_periods=1).max())
     df_work['52_low_calc'] = df_work.groupby('symbol')['low'].transform(lambda x: x.rolling(window=window, min_periods=1).min())
     df_work['52_high'] = np.where(df_work['52_high'].notna(), df_work['52_high'], df_work['52_high_calc'])
     df_work['52_low'] = np.where(df_work['52_low'].notna(), df_work['52_low'], df_work['52_low_calc'])
     df_work.drop(columns=['52_high_calc', '52_low_calc'], inplace=True, errors='ignore')
+
     df_work['vol'] = pd.to_numeric(df_work['vol'], errors='coerce').fillna(0)
+
+    # EMA trend based on EMA_TREND
     df_work['ema_trend'] = df_work.groupby('symbol')['close'].transform(lambda x: np.where(x > x.ewm(span=EMA_TREND, adjust=False).mean(), 'Uptrend', 'Downtrend'))
+
+    # Trend flags
     df_work = compute_trend_flags(df_work)
+
     output_cols = ['symbol', 'conf', 'open', 'high', 'low', 'close', 'ltp', 'close_minus_ltp', 'close_minus_ltp_pct', 'vwap', 'vol', 'prev_close', 'turnover', 'trans', 'diff', 'range', 'diff_pct', 'range_pct', 'vwap_pct', '52_high', '52_low', 'rsi', 'macd', 'signal', 'ema_trend', 'trend_1d', 'trend_1w', 'trend_2w', 'trend_1m', 'date']
     for c in output_cols:
         if c not in df_work.columns:
@@ -467,7 +496,6 @@ def upload_to_gsheet(df, spreadsheet_id, service_account_json_str, sheet_prefix=
             time.sleep(2 ** attempt)
     return False
 
-
 def save_to_excel(df, filename=OUTPUT_FILE):
     if df.empty:
         print('empty dataframe, nothing to save')
@@ -509,7 +537,6 @@ def save_to_excel(df, filename=OUTPUT_FILE):
         print(f'saved excel with {len(df.date.unique())} sheets to {filename}')
         logging.info(f'saved excel with {len(df.date.unique())} sheets to {filename}')
 
-
 def main():
     setup_logging()
     logging.info('starting historical job')
@@ -542,7 +569,6 @@ def main():
 
     print('job complete')
     logging.info('job complete')
-
 
 if __name__ == '__main__':
     main()
