@@ -3,10 +3,13 @@ name: Nepse Data Updater
 on:
   push:
     branches:
-        - main
+      - main
+
   schedule:
     # 4 PM Nepal Time = 10:15 UTC
     - cron: '15 10 * * 0-4'
+
+  workflow_dispatch:   # ✅ Enables manual run from GitHub UI
 
 jobs:
   run-script:
@@ -52,7 +55,6 @@ jobs:
         GSHEET_ID: ${{ secrets.GSHEET_ID }}
       run: python tests/test_gsheet_auth.py
 
-
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -60,5 +62,3 @@ jobs:
         path: |
           logs/
           output/*.xlsx
-
-
